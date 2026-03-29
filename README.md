@@ -52,6 +52,72 @@ const extractors = await cf.extractors();
 
 No gas fees. No API keys. Just USDC on Base.
 
+## Configuration
+
+```typescript
+const cf = new ClawFetch({
+  // Required
+  privateKey: '0x...',           // Ethereum private key (hex, 0x-prefixed)
+
+  // Optional
+  baseUrl: 'https://api.clawfetch.ai', // API endpoint (default)
+  timeoutMs: 30000,              // Request timeout in ms (default: 30s)
+  debug: false,                  // Enable console debug logging
+
+  // Retry configuration (enabled by default)
+  retry: {
+    maxRetries: 3,               // Max retry attempts (default: 3)
+    initialDelayMs: 500,         // Initial backoff delay (default: 500ms)
+    maxDelayMs: 10000,           // Maximum backoff delay (default: 10s)
+    backoffMultiplier: 2,        // Exponential backoff factor (default: 2)
+  },
+  // retry: false,               // Disable retries entirely
+});
+```
+
+## Error Handling
+
+The SDK provides typed errors for precise error handling:
+
+```typescript
+import {
+  ClawFetch,
+  ClawFetchError,    // Base class for all errors
+  PaymentError,      // 402 — insufficient USDC, invalid signature
+  NetworkError,      // Connection refused, DNS failure, timeout
+  RateLimitError,    // 429 — too many requests (includes retryAfterMs)
+  ApiError,          // 4xx/5xx server errors
+} from '@clawfetch/sdk';
+
+try {
+  const result = await cf.fetch('https://example.com');
+} catch (err) {
+  if (err instanceof PaymentError) {
+    console.error('Payment failed:', err.message);
+  } else if (err instanceof RateLimitError) {
+    console.error(`Rate limited. Retry after ${err.retryAfterMs}ms`);
+  } else if (err instanceof NetworkError) {
+    console.error('Network issue:', err.message, err.cause);
+  } else if (err instanceof ApiError) {
+    console.error(`API error ${err.statusCode}:`, err.message);
+  }
+}
+```
+
+All errors include `statusCode`, `endpoint`, and extend `ClawFetchError`.
+
+## Retry Behavior
+
+By default, the SDK retries transient errors with exponential backoff + jitter:
+
+| Error Type | Retried? | Notes |
+|------------|----------|-------|
+| 429 (Rate Limit) | ✅ | Respects `Retry-After` header |
+| 502, 503, 504 | ✅ | Server/gateway errors |
+| Network errors | ✅ | Timeouts, connection failures |
+| 400, 404 | ❌ | Client errors (not transient) |
+| 402 (Payment) | ❌ | Payment errors (not transient) |
+
 ## Pricing
 
 | Endpoint | Price |
@@ -66,7 +132,7 @@ No gas fees. No API keys. Just USDC on Base.
 
 ## Supported Extractors
 
-CoinGecko, GitHub, SEC EDGAR, Hacker News, Reddit, Twitter/X, Product Hunt, Crunchbase, npm, PyPI, Wikipedia, arXiv, Weather, News (AP/Reuters/BBC), YouTube, and more.
+CoinGecko, GitHub, SEC EDGAR, Hacker News, Reddit, Twitter/X, Product Hunt, Crunchbase, npm, PyPI, Wikipedia, arXiv, Weather, News (AP/Reuters/BBC), YouTube, Amazon, IMDb, Zillow, Redfin.
 
 ## Requirements
 
