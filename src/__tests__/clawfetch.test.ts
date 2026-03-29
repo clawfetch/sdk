@@ -6,7 +6,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ClawFetch } from '../index.js';
+import {
+  ClawFetch,
+  ClawFetchError,
+  PaymentError,
+  NetworkError,
+  RateLimitError,
+  ApiError,
+} from '../index.js';
 
 // ─── Test Helpers ────────────────────────────────────────────────
 
@@ -20,7 +27,7 @@ function mockResponse(status: number, body: any, headers?: Record<string, string
   return {
     ok: status >= 200 && status < 300,
     status,
-    statusText: status === 200 ? 'OK' : status === 402 ? 'Payment Required' : 'Error',
+    statusText: status === 200 ? 'OK' : status === 402 ? 'Payment Required' : status === 429 ? 'Too Many Requests' : 'Error',
     headers: headersObj,
     json: async () => body,
     text: async () => JSON.stringify(body),
@@ -29,34 +36,13 @@ function mockResponse(status: number, body: any, headers?: Record<string, string
 }
 
 /**
- * Creates a standard 402 payment required response body (x402 v2 format).
- */
-function make402Body() {
-  return {
-    x402Version: 2,
-    accepts: [
-      {
-        network: 'eip155:8453',
-        asset: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
-        payTo: '0x1234567890abcdef1234567890abcdef12345678',
-        maxAmountRequired: '1000', // $0.001
-        maxTimeoutSeconds: 300,
-        extra: {
-          name: 'USD Coin',
-          version: '2',
-        },
-      },
-    ],
-  };
-}
-
-/**
  * Helper to create a ClawFetch client with mocked fetch.
  * Returns the client and the mock function for assertions.
  */
-function createMockedClient(fetchMock: typeof globalThis.fetch) {
-  // We need to mock the global fetch before creating the client
-  // since wrapFetchWithPayment captures the fetch function
+function createMockedClient(
+  fetchMock: typeof globalThis.fetch,
+  opts?: Partial<import('../index.js').ClawFetchOptions>,
+) {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = fetchMock;
 
@@ -64,6 +50,7 @@ function createMockedClient(fetchMock: typeof globalThis.fetch) {
     const client = new ClawFetch({
       privateKey: TEST_PRIVATE_KEY,
       baseUrl: 'https://mock.clawfetch.test',
+      ...opts,
     });
     return { client, restore: () => { globalThis.fetch = originalFetch; } };
   } catch (e) {
@@ -94,7 +81,6 @@ describe('ClawFetch', () => {
       try {
         const client = new ClawFetch({ privateKey: TEST_PRIVATE_KEY });
         expect(client).toBeDefined();
-        // baseUrl is private, but we verify via walletAddress being set
         expect(client.walletAddress).toBeTruthy();
       } finally {
         globalThis.fetch = originalFetch;
@@ -106,7 +92,6 @@ describe('ClawFetch', () => {
       globalThis.fetch = vi.fn();
       try {
         const client = new ClawFetch({ privateKey: TEST_PRIVATE_KEY });
-        // Hardhat account #0 address
         expect(client.walletAddress.toLowerCase()).toBe(
           '0xf39fd6e51aad88f6f4ce6ab8827279cfffb92266'
         );
@@ -122,6 +107,48 @@ describe('ClawFetch', () => {
         const client = new ClawFetch({
           privateKey: TEST_PRIVATE_KEY,
           baseUrl: 'https://api.clawfetch.ai/',
+        });
+        expect(client).toBeDefined();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('should accept custom timeout', () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn();
+      try {
+        const client = new ClawFetch({
+          privateKey: TEST_PRIVATE_KEY,
+          timeoutMs: 5000,
+        });
+        expect(client).toBeDefined();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('should accept retry: false to disable retries', () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn();
+      try {
+        const client = new ClawFetch({
+          privateKey: TEST_PRIVATE_KEY,
+          retry: false,
+        });
+        expect(client).toBeDefined();
+      } finally {
+        globalThis.fetch = originalFetch;
+      }
+    });
+
+    it('should accept custom retry config', () => {
+      const originalFetch = globalThis.fetch;
+      globalThis.fetch = vi.fn();
+      try {
+        const client = new ClawFetch({
+          privateKey: TEST_PRIVATE_KEY,
+          retry: { maxRetries: 5, initialDelayMs: 100 },
         });
         expect(client).toBeDefined();
       } finally {
@@ -144,7 +171,18 @@ describe('ClawFetch', () => {
       try {
         const result = await client.health();
         expect(result).toEqual(healthResponse);
-        // health() uses raw globalThis.fetch, not paidFetch
+      } finally {
+        restore();
+      }
+    });
+
+    it('should throw NetworkError on health check failure', async () => {
+      const fetchMock = vi.fn().mockRejectedValue(new TypeError('fetch failed'));
+      const { client, restore } = createMockedClient(fetchMock);
+
+      try {
+        await expect(client.health()).rejects.toThrow(NetworkError);
+        await expect(client.health()).rejects.toThrow(/Health check failed/);
       } finally {
         restore();
       }
@@ -160,8 +198,6 @@ describe('ClawFetch', () => {
         contentType: 'text/markdown',
       };
 
-      // The x402 wrapper handles the 402 flow internally
-      // After payment, it returns the actual response
       const fetchMock = vi.fn()
         .mockResolvedValueOnce(mockResponse(200, fetchResult));
 
@@ -291,11 +327,7 @@ describe('ClawFetch', () => {
     });
 
     it('should pass sources option', async () => {
-      const researchResult = {
-        topic: 'test',
-        summary: 'test',
-        sources: [],
-      };
+      const researchResult = { topic: 'test', summary: 'test', sources: [] };
 
       const fetchMock = vi.fn()
         .mockResolvedValueOnce(mockResponse(200, researchResult));
@@ -408,12 +440,14 @@ describe('ClawFetch', () => {
     });
   });
 
-  describe('error handling', () => {
-    it('should throw on non-402/non-200 response', async () => {
+  describe('error classification', () => {
+    it('should throw on 402 payment errors (via x402 wrapper)', async () => {
+      // The x402 wrapFetchWithPayment intercepts 402 responses before our code.
+      // When it can't complete payment, it throws. Our code catches this.
       const fetchMock = vi.fn()
-        .mockResolvedValueOnce(mockResponse(500, { error: 'Internal Server Error' }));
+        .mockResolvedValueOnce(mockResponse(402, { error: 'Insufficient USDC balance' }));
 
-      const { client, restore } = createMockedClient(fetchMock);
+      const { client, restore } = createMockedClient(fetchMock, { retry: false });
 
       try {
         await expect(client.fetch('https://example.com')).rejects.toThrow();
@@ -422,27 +456,212 @@ describe('ClawFetch', () => {
       }
     });
 
-    it('should throw with error message from API', async () => {
+    it('should throw RateLimitError on 429', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValue(mockResponse(429, { error: 'Too many requests' }, { 'retry-after': '5' }));
+
+      const { client, restore } = createMockedClient(fetchMock, { retry: false });
+
+      try {
+        try {
+          await client.fetch('https://example.com');
+          expect.unreachable('Should have thrown');
+        } catch (err) {
+          expect(err).toBeInstanceOf(RateLimitError);
+          const rle = err as RateLimitError;
+          expect(rle.retryAfterMs).toBe(5000);
+          expect(rle.statusCode).toBe(429);
+        }
+      } finally {
+        restore();
+      }
+    });
+
+    it('should throw ApiError on 400', async () => {
       const fetchMock = vi.fn()
         .mockResolvedValueOnce(mockResponse(400, { error: 'Invalid URL format' }));
 
       const { client, restore } = createMockedClient(fetchMock);
 
       try {
-        await expect(client.fetch('not-a-url')).rejects.toThrow();
+        try {
+          await client.fetch('not-a-url');
+          expect.unreachable('Should have thrown');
+        } catch (err) {
+          expect(err).toBeInstanceOf(ApiError);
+          expect((err as ApiError).statusCode).toBe(400);
+        }
       } finally {
         restore();
       }
     });
 
-    it('should throw on network errors', async () => {
+    it('should throw ApiError on 500', async () => {
       const fetchMock = vi.fn()
-        .mockRejectedValueOnce(new TypeError('fetch failed'));
+        .mockResolvedValue(mockResponse(500, { error: 'Internal Server Error' }));
 
-      const { client, restore } = createMockedClient(fetchMock);
+      const { client, restore } = createMockedClient(fetchMock, { retry: false });
 
       try {
-        await expect(client.fetch('https://example.com')).rejects.toThrow('fetch failed');
+        await expect(client.fetch('https://example.com')).rejects.toThrow(ApiError);
+      } finally {
+        restore();
+      }
+    });
+
+    it('should throw NetworkError on network failures', async () => {
+      const fetchMock = vi.fn()
+        .mockRejectedValue(new TypeError('fetch failed'));
+
+      const { client, restore } = createMockedClient(fetchMock, { retry: false });
+
+      try {
+        await expect(client.fetch('https://example.com')).rejects.toThrow(NetworkError);
+      } finally {
+        restore();
+      }
+    });
+
+    it('should not retry on 402 payment errors', async () => {
+      // 402 is intercepted by x402 wrapper — it throws, and we don't retry payment errors
+      const fetchMock = vi.fn()
+        .mockResolvedValue(mockResponse(402, { error: 'Payment failed' }));
+
+      const { client, restore } = createMockedClient(fetchMock, {
+        retry: { maxRetries: 3, initialDelayMs: 1, maxDelayMs: 1, backoffMultiplier: 1 },
+      });
+
+      try {
+        await expect(client.fetch('https://example.com')).rejects.toThrow();
+      } finally {
+        restore();
+      }
+    });
+
+    it('should not retry 400 client errors', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValue(mockResponse(400, { error: 'Bad request' }));
+
+      const { client, restore } = createMockedClient(fetchMock, {
+        retry: { maxRetries: 3, initialDelayMs: 1 },
+      });
+
+      try {
+        await expect(client.fetch('https://example.com')).rejects.toThrow(ApiError);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } finally {
+        restore();
+      }
+    });
+
+    it('all errors extend ClawFetchError', () => {
+      const payment = new PaymentError('test', 402, '/fetch');
+      const network = new NetworkError('test', '/fetch');
+      const rateLimit = new RateLimitError('test', '/fetch');
+      const api = new ApiError('test', 500, '/fetch');
+
+      expect(payment).toBeInstanceOf(ClawFetchError);
+      expect(network).toBeInstanceOf(ClawFetchError);
+      expect(rateLimit).toBeInstanceOf(ClawFetchError);
+      expect(api).toBeInstanceOf(ClawFetchError);
+
+      expect(payment.name).toBe('PaymentError');
+      expect(network.name).toBe('NetworkError');
+      expect(rateLimit.name).toBe('RateLimitError');
+      expect(api.name).toBe('ApiError');
+    });
+  });
+
+  describe('retry behavior', () => {
+    it('should retry on 503 and succeed', async () => {
+      const fetchResult = { url: 'https://example.com', content: 'Success' };
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(mockResponse(503, { error: 'Service Unavailable' }))
+        .mockResolvedValueOnce(mockResponse(200, fetchResult));
+
+      const { client, restore } = createMockedClient(fetchMock, {
+        retry: { maxRetries: 2, initialDelayMs: 1, maxDelayMs: 1, backoffMultiplier: 1 },
+      });
+
+      try {
+        const result = await client.fetch('https://example.com');
+        expect(result).toEqual(fetchResult);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        restore();
+      }
+    });
+
+    it('should retry on 502 gateway error', async () => {
+      const fetchResult = { url: 'https://example.com', content: 'OK' };
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(mockResponse(502, { error: 'Bad Gateway' }))
+        .mockResolvedValueOnce(mockResponse(200, fetchResult));
+
+      const { client, restore } = createMockedClient(fetchMock, {
+        retry: { maxRetries: 2, initialDelayMs: 1, maxDelayMs: 1, backoffMultiplier: 1 },
+      });
+
+      try {
+        const result = await client.fetch('https://example.com');
+        expect(result.content).toBe('OK');
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        restore();
+      }
+    });
+
+    it('should retry on network errors', async () => {
+      const fetchResult = { url: 'https://example.com', content: 'OK' };
+
+      const fetchMock = vi.fn()
+        .mockRejectedValueOnce(new TypeError('fetch failed'))
+        .mockResolvedValueOnce(mockResponse(200, fetchResult));
+
+      const { client, restore } = createMockedClient(fetchMock, {
+        retry: { maxRetries: 2, initialDelayMs: 1, maxDelayMs: 1, backoffMultiplier: 1 },
+      });
+
+      try {
+        const result = await client.fetch('https://example.com');
+        expect(result.content).toBe('OK');
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+      } finally {
+        restore();
+      }
+    });
+
+    it('should not retry when retry is disabled', async () => {
+      const fetchMock = vi.fn()
+        .mockResolvedValue(mockResponse(503, { error: 'Service Unavailable' }));
+
+      const { client, restore } = createMockedClient(fetchMock, { retry: false });
+
+      try {
+        await expect(client.fetch('https://example.com')).rejects.toThrow(ApiError);
+        expect(fetchMock).toHaveBeenCalledTimes(1);
+      } finally {
+        restore();
+      }
+    });
+
+    it('should retry on 429 and succeed', async () => {
+      const fetchResult = { url: 'https://example.com', content: 'OK' };
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(mockResponse(429, { error: 'Rate limited' }, { 'retry-after': '1' }))
+        .mockResolvedValueOnce(mockResponse(200, fetchResult));
+
+      const { client, restore } = createMockedClient(fetchMock, {
+        retry: { maxRetries: 2, initialDelayMs: 1, maxDelayMs: 10, backoffMultiplier: 1 },
+      });
+
+      try {
+        const result = await client.fetch('https://example.com');
+        expect(result.content).toBe('OK');
+        expect(fetchMock).toHaveBeenCalledTimes(2);
       } finally {
         restore();
       }
@@ -450,12 +669,16 @@ describe('ClawFetch', () => {
   });
 
   describe('type exports', () => {
-    it('should export all expected types', async () => {
-      // This is a compile-time test — if these imports fail, TypeScript types are broken
+    it('should export all expected types and classes', async () => {
       const mod = await import('../index.js');
       expect(mod.ClawFetch).toBeDefined();
       expect(typeof mod.ClawFetch).toBe('function');
       expect(mod.default).toBe(mod.ClawFetch);
+      expect(mod.ClawFetchError).toBeDefined();
+      expect(mod.PaymentError).toBeDefined();
+      expect(mod.NetworkError).toBeDefined();
+      expect(mod.RateLimitError).toBeDefined();
+      expect(mod.ApiError).toBeDefined();
     });
   });
 });
