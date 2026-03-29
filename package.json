@@ -24,6 +24,8 @@
   ],
   "scripts": {
     "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
@@ -43,13 +45,14 @@
   },
   "homepage": "https://api.clawfetch.ai",
   "dependencies": {
-    "@x402/fetch": "^2.4.0",
-    "@x402/evm": "^2.4.0",
     "@x402/core": "^2.4.0",
+    "@x402/evm": "^2.4.0",
+    "@x402/fetch": "^2.4.0",
     "viem": "^2.0.0"
   },
   "devDependencies": {
     "tsup": "^8.0.0",
-    "typescript": "^5.4.0"
+    "typescript": "^5.4.0",
+    "vitest": "^4.1.2"
   }
 }
