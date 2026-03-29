@@ -1,0 +1,50 @@
+{
+  "name": "@clawfetch/sdk",
+  "version": "0.1.0",
+  "description": "JavaScript/TypeScript SDK for ClawFetch — Web Intelligence API for AI Agents (x402-native)",
+  "type": "module",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.mjs",
+  "types": "dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/esm/index.mjs",
+      "require": "./dist/cjs/index.js",
+      "types": "./dist/types/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "clawfetch",
+    "x402",
+    "web-intelligence",
+    "ai-agents",
+    "crypto",
+    "usdc",
+    "base",
+    "api"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/clawfetch/sdk"
+  },
+  "homepage": "https://api.clawfetch.ai",
+  "dependencies": {
+    "@x402/fetch": "^2.4.0",
+    "@x402/evm": "^2.4.0",
+    "@x402/core": "^2.4.0",
+    "viem": "^2.0.0"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.4.0"
+  }
+}
