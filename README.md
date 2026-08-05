@@ -128,6 +128,7 @@ By default, the SDK retries transient errors with exponential backoff + jitter:
 | `/research` | $0.01 |
 | `/domains/check` | $0.002 |
 | `/domains/suggest` | $0.002 |
+| `/parse` | $0.002 |
 | `/extractors` | $0.001 |
 
 ## Supported Extractors

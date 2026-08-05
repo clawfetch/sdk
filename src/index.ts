@@ -144,6 +144,17 @@ export interface ExtractorInfo {
   fields: string[];
 }
 
+export interface ParseResult {
+  /** Document content as GitHub-Flavored Markdown */
+  markdown: string;
+  /** Detected or declared source format (docx, pptx, xlsx, pdf, ...) */
+  format: string;
+  /** Length of the markdown output */
+  chars: number;
+  /** Filename hint, when one was provided or derived from the URL */
+  filename?: string;
+}
+
 // ─── Internal helpers ────────────────────────────────────────────
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -211,13 +222,18 @@ export class ClawFetch {
   }
 
   /** Extract structured data from a supported URL ($0.003) */
-  async extract(url: string): Promise<ExtractResult> {
-    return this.post<ExtractResult>('/extract', { url });
+  async extract(url: string, opts?: { type?: string }): Promise<ExtractResult> {
+    // NOTE: the server parameter is `type`, NOT `extractor`. It is optional —
+    // the extractor is auto-detected from the URL when omitted.
+    return this.post<ExtractResult>('/extract', { url, ...opts });
   }
 
   /** Multi-source research on a topic ($0.01) */
-  async research(topic: string, opts?: { sources?: number; depth?: string }): Promise<ResearchResult> {
-    return this.post<ResearchResult>('/research', { topic, ...opts });
+  async research(topic: string, opts?: { maxResults?: number }): Promise<ResearchResult> {
+    // NOTE: the server requires `query` (not `topic`) and `maxResults` (not
+    // `sources`). The public method keeps the friendlier `topic` name and maps
+    // it here. Sending `topic` on the wire returns HTTP 400 AFTER payment.
+    return this.post<ResearchResult>('/research', { query: topic, ...opts });
   }
 
   /** Check domain availability ($0.002) */
@@ -226,8 +242,51 @@ export class ClawFetch {
   }
 
   /** Generate and check domain suggestions ($0.002) */
-  async domainsSuggest(query: string, opts?: { tlds?: string[]; count?: number }): Promise<DomainSuggestResult> {
-    return this.post<DomainSuggestResult>('/domains/suggest', { query, ...opts });
+  async domainsSuggest(
+    keywords: string | string[],
+    opts?: { tlds?: string[]; maxCheck?: number },
+  ): Promise<DomainSuggestResult> {
+    // NOTE: the server requires `keywords` as an ARRAY and rejects anything
+    // else with HTTP 400 (after payment). Accept a convenience string here and
+    // normalize, splitting on whitespace/commas.
+    const list = Array.isArray(keywords)
+      ? keywords
+      : keywords.split(/[\s,]+/).filter(Boolean);
+    return this.post<DomainSuggestResult>('/domains/suggest', { keywords: list, ...opts });
+  }
+
+  /**
+   * Parse an office document (docx, pptx, xlsx, pdf, odt, ods, odp, rtf, epub,
+   * csv, doc, ppt) into GitHub-Flavored Markdown ($0.002).
+   * Pass either a document URL or raw bytes (Uint8Array/ArrayBuffer/base64 string).
+   * No OCR: scanned/image-only PDFs are rejected with a 422.
+   */
+  async parse(
+    source: string | Uint8Array | ArrayBuffer,
+    opts?: { filename?: string; format?: string },
+  ): Promise<ParseResult> {
+    let body: Record<string, unknown>;
+    if (typeof source === 'string' && /^https?:\/\//i.test(source)) {
+      body = { url: source, ...opts };
+    } else {
+      let b64: string;
+      if (typeof source === 'string') {
+        b64 = source; // already base64
+      } else {
+        const bytes = source instanceof Uint8Array ? source : new Uint8Array(source);
+        // btoa-safe chunked conversion (works in Node and browsers)
+        let bin = '';
+        const CHUNK = 0x8000;
+        for (let i = 0; i < bytes.length; i += CHUNK) {
+          bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+        }
+        b64 = (globalThis as { btoa?: (s: string) => string }).btoa
+          ? globalThis.btoa(bin)
+          : Buffer.from(bytes).toString('base64');
+      }
+      body = { base64: b64, ...opts };
+    }
+    return this.post<ParseResult>('/parse', body);
   }
 
   /** List available extractors ($0.001) */

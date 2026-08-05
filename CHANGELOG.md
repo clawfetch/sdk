@@ -5,6 +5,18 @@ All notable changes to `@clawfetch/sdk` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-08-05
+
+### Added
+- `parse(source, opts?)` — parse office documents (docx, pptx, xlsx, pdf, odt, ods, odp, rtf, epub, csv, doc, ppt) into GitHub-Flavored Markdown via the new `POST /parse` endpoint ($0.002). Accepts a document URL, `Uint8Array`/`ArrayBuffer` bytes, or a base64 string; optional `filename`/`format` hints. No OCR — scanned/image-only PDFs return HTTP 422.
+- `ParseResult` type export (`markdown`, `format`, `chars`, `filename?`)
+- Wire-contract test coverage for both `/parse` call shapes (url and base64)
+
+### Fixed
+- `research()` now sends `query`/`maxResults` on the wire (server rejected the previous `topic`/`sources` params with HTTP 400 after payment)
+- `domainsSuggest()` now sends `keywords` as an array as the server requires; accepts a convenience string and normalizes it
+- `extract()` accepts an optional `type` extractor override
+
 ## [0.1.0] - 2026-03-29
 
 ### Added

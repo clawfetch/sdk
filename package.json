@@ -1,6 +1,6 @@
 {
   "name": "@clawfetch/sdk",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "JavaScript/TypeScript SDK for ClawFetch — Web Intelligence API for AI Agents (x402-native)",
   "type": "module",
   "main": "dist/index.js",
@@ -26,7 +26,9 @@
     "build": "tsup",
     "test": "vitest run",
     "test:watch": "vitest",
-    "prepublishOnly": "npm run build"
+    "prepublishOnly": "npm run build",
+    "test:wire": "node test/sdk-wire-contract.test.mjs",
+    "test:all": "npm run test && npm run build && npm run test:wire"
   },
   "keywords": [
     "clawfetch",
