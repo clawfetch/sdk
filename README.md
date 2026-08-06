@@ -22,20 +22,20 @@ const cf = new ClawFetch({
 // Fetch any URL as clean markdown ($0.001)
 const page = await cf.fetch('https://example.com');
 
-// Extract structured data ($0.003)
+// Extract structured data ($0.008)
 const btc = await cf.extract('https://coingecko.com/en/coins/bitcoin');
 console.log(btc.data); // { name, price, market_cap, ... }
 
-// JS-rendered pages ($0.002)
+// JS-rendered pages ($0.005)
 const rendered = await cf.render('https://app.uniswap.org');
 
-// Multi-source research ($0.01)
+// Multi-source research ($0.02)
 const report = await cf.research('latest AI agent frameworks');
 
-// Domain availability ($0.002)
+// Domain availability ($0.008)
 const domains = await cf.domainsCheck(['coolstartup.com', 'coolstartup.ai']);
 
-// Domain suggestions ($0.002)
+// Domain suggestions ($0.008)
 const ideas = await cf.domainsSuggest('ai coding assistant');
 
 // List extractors ($0.001)
@@ -123,12 +123,12 @@ By default, the SDK retries transient errors with exponential backoff + jitter:
 | Endpoint | Price |
 |----------|-------|
 | `/fetch` | $0.001 |
-| `/render` | $0.002 |
-| `/extract` | $0.003 |
-| `/research` | $0.01 |
-| `/domains/check` | $0.002 |
-| `/domains/suggest` | $0.002 |
-| `/parse` | $0.002 |
+| `/render` | $0.005 |
+| `/extract` | $0.008 |
+| `/research` | $0.02 |
+| `/domains/check` | $0.008 |
+| `/domains/suggest` | $0.008 |
+| `/parse` | $0.005 |
 | `/extractors` | $0.001 |
 
 ## Supported Extractors

@@ -216,19 +216,19 @@ export class ClawFetch {
     return this.post<FetchResult>('/fetch', { url, ...opts });
   }
 
-  /** Render a JS-heavy page with a stealth browser ($0.002) */
+  /** Render a JS-heavy page with a stealth browser ($0.005) */
   async render(url: string, opts?: { maxChars?: number; waitFor?: string }): Promise<RenderResult> {
     return this.post<RenderResult>('/render', { url, ...opts });
   }
 
-  /** Extract structured data from a supported URL ($0.003) */
+  /** Extract structured data from a supported URL ($0.008) */
   async extract(url: string, opts?: { type?: string }): Promise<ExtractResult> {
     // NOTE: the server parameter is `type`, NOT `extractor`. It is optional —
     // the extractor is auto-detected from the URL when omitted.
     return this.post<ExtractResult>('/extract', { url, ...opts });
   }
 
-  /** Multi-source research on a topic ($0.01) */
+  /** Multi-source research on a topic ($0.02) */
   async research(topic: string, opts?: { maxResults?: number }): Promise<ResearchResult> {
     // NOTE: the server requires `query` (not `topic`) and `maxResults` (not
     // `sources`). The public method keeps the friendlier `topic` name and maps
@@ -236,12 +236,12 @@ export class ClawFetch {
     return this.post<ResearchResult>('/research', { query: topic, ...opts });
   }
 
-  /** Check domain availability ($0.002) */
+  /** Check domain availability ($0.008) */
   async domainsCheck(domains: string[]): Promise<DomainCheckResult> {
     return this.post<DomainCheckResult>('/domains/check', { domains });
   }
 
-  /** Generate and check domain suggestions ($0.002) */
+  /** Generate and check domain suggestions ($0.008) */
   async domainsSuggest(
     keywords: string | string[],
     opts?: { tlds?: string[]; maxCheck?: number },
@@ -257,7 +257,7 @@ export class ClawFetch {
 
   /**
    * Parse an office document (docx, pptx, xlsx, pdf, odt, ods, odp, rtf, epub,
-   * csv, doc, ppt) into GitHub-Flavored Markdown ($0.002).
+   * csv, doc, ppt) into GitHub-Flavored Markdown ($0.005).
    * Pass either a document URL or raw bytes (Uint8Array/ArrayBuffer/base64 string).
    * No OCR: scanned/image-only PDFs are rejected with a 422.
    */
