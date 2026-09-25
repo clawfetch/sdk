@@ -1,6 +1,6 @@
 {
   "name": "@clawfetch/sdk",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "JavaScript/TypeScript SDK for ClawFetch — Web Intelligence API for AI Agents (x402-native)",
   "type": "module",
   "main": "dist/index.js",

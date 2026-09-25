@@ -124,16 +124,19 @@ export interface ResearchResult {
 export interface DomainCheckResult {
   domains: Array<{
     domain: string;
-    available: boolean;
+    available: boolean | null;
     error?: string;
   }>;
 }
 
 export interface DomainSuggestResult {
   query: string;
+  generated: number;
+  checked: number;
   suggestions: Array<{
     domain: string;
-    available: boolean;
+    available: boolean | null;
+    error?: string;
   }>;
 }
 
@@ -238,7 +241,8 @@ export class ClawFetch {
 
   /** Check domain availability ($0.008) */
   async domainsCheck(domains: string[]): Promise<DomainCheckResult> {
-    return this.post<DomainCheckResult>('/domains/check', { domains });
+    const raw = await this.post<{ results: DomainCheckResult['domains'] }>('/domains/check', { domains });
+    return { domains: raw.results };
   }
 
   /** Generate and check domain suggestions ($0.008) */
@@ -252,7 +256,16 @@ export class ClawFetch {
     const list = Array.isArray(keywords)
       ? keywords
       : keywords.split(/[\s,]+/).filter(Boolean);
-    return this.post<DomainSuggestResult>('/domains/suggest', { keywords: list, ...opts });
+    const body: Record<string, unknown> = { keywords: list };
+    if (opts?.tlds) body.tlds = opts.tlds.map(t => t.replace(/^\.+/, '').toLowerCase());
+    if (opts?.maxCheck !== undefined) body.maxCheck = opts.maxCheck;
+    const raw = await this.post<{
+      keywords: string[];
+      generated: number;
+      checked: number;
+      allResults: DomainSuggestResult['suggestions'];
+    }>('/domains/suggest', body);
+    return { query: raw.keywords.join(' '), generated: raw.generated, checked: raw.checked, suggestions: raw.allResults };
   }
 
   /**

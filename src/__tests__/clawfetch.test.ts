@@ -39,6 +39,10 @@ function mockResponse(status: number, body: any, headers?: Record<string, string
  * Helper to create a ClawFetch client with mocked fetch.
  * Returns the client and the mock function for assertions.
  */
+async function requestBody([input, init]: any[]) {
+  return JSON.parse(init?.body ?? await (input as Request).text());
+}
+
 function createMockedClient(
   fetchMock: typeof globalThis.fetch,
   opts?: Partial<import('../index.js').ClawFetchOptions>,
@@ -344,24 +348,24 @@ describe('ClawFetch', () => {
   });
 
   describe('domainsCheck()', () => {
-    it('should check domain availability', async () => {
-      const checkResult = {
-        domains: [
+    it('normalizes the live server response shape', async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(mockResponse(200, {
+        checked: 3, available: 1, taken: 1,
+        results: [
           { domain: 'coolstartup.com', available: false },
           { domain: 'coolstartup.ai', available: true },
+          { domain: 'coolstartup.io', available: null, error: 'WHOIS timeout' },
         ],
-      };
-
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(mockResponse(200, checkResult));
-
+      }));
       const { client, restore } = createMockedClient(fetchMock);
-
       try {
-        const result = await client.domainsCheck(['coolstartup.com', 'coolstartup.ai']);
-        expect(result.domains).toHaveLength(2);
-        expect(result.domains[0].available).toBe(false);
-        expect(result.domains[1].available).toBe(true);
+        const result = await client.domainsCheck(['coolstartup.com', 'coolstartup.ai', 'coolstartup.io']);
+        expect(await requestBody(fetchMock.mock.calls[0])).toEqual({ domains: ['coolstartup.com', 'coolstartup.ai', 'coolstartup.io'] });
+        expect(result.domains).toEqual([
+          { domain: 'coolstartup.com', available: false },
+          { domain: 'coolstartup.ai', available: true },
+          { domain: 'coolstartup.io', available: null, error: 'WHOIS timeout' },
+        ]);
       } finally {
         restore();
       }
@@ -369,45 +373,26 @@ describe('ClawFetch', () => {
   });
 
   describe('domainsSuggest()', () => {
-    it('should suggest available domains', async () => {
-      const suggestResult = {
-        query: 'ai coding assistant',
-        suggestions: [
-          { domain: 'aicodinghelp.com', available: true },
-          { domain: 'codeassist.ai', available: true },
+    it('sends the live request contract and normalizes the live response shape', async () => {
+      const fetchMock = vi.fn().mockResolvedValueOnce(mockResponse(200, {
+        keywords: ['ai', 'coding'], generated: 72, checked: 2,
+        available: ['aicoding.dev'],
+        allResults: [
+          { domain: 'aicoding.dev', available: true },
+          { domain: 'codingai.ai', available: false },
         ],
-      };
-
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(mockResponse(200, suggestResult));
-
+      }));
       const { client, restore } = createMockedClient(fetchMock);
-
       try {
-        const result = await client.domainsSuggest('ai coding assistant');
-        expect(result.query).toBe('ai coding assistant');
-        expect(result.suggestions.length).toBeGreaterThan(0);
-        expect(result.suggestions[0]).toHaveProperty('domain');
-        expect(result.suggestions[0]).toHaveProperty('available');
-      } finally {
-        restore();
-      }
-    });
-
-    it('should pass TLD options', async () => {
-      const suggestResult = {
-        query: 'test',
-        suggestions: [{ domain: 'test.ai', available: true }],
-      };
-
-      const fetchMock = vi.fn()
-        .mockResolvedValueOnce(mockResponse(200, suggestResult));
-
-      const { client, restore } = createMockedClient(fetchMock);
-
-      try {
-        const result = await client.domainsSuggest('test', { tlds: ['.ai', '.dev'] });
-        expect(result).toBeDefined();
+        const result = await client.domainsSuggest('ai, coding', { tlds: ['.AI', 'dev'], maxCheck: 2 });
+        expect(await requestBody(fetchMock.mock.calls[0])).toEqual({ keywords: ['ai', 'coding'], tlds: ['ai', 'dev'], maxCheck: 2 });
+        expect(result).toEqual({
+          query: 'ai coding', generated: 72, checked: 2,
+          suggestions: [
+            { domain: 'aicoding.dev', available: true },
+            { domain: 'codingai.ai', available: false },
+          ],
+        });
       } finally {
         restore();
       }
