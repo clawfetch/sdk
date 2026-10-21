@@ -43,7 +43,12 @@ function makeSpyClient() {
   });
   client.paidFetch = async (url, opts = {}) => {
     captured.push({ url: String(url), body: JSON.parse(opts.body ?? '{}') });
-    return new Response(JSON.stringify({ ok: true, sources: [], data: {}, domains: [] }), {
+    // Superset of every endpoint's response shape the SDK maps (e.g.
+    // domainsSuggest() reads `keywords`/`allResults`, domainsCheck() `results`).
+    return new Response(JSON.stringify({
+      ok: true, sources: [], data: {}, domains: [], results: [],
+      keywords: [], generated: 0, checked: 0, allResults: [],
+    }), {
       status: 200, headers: { 'Content-Type': 'application/json' },
     });
   };
@@ -68,6 +73,7 @@ async function main() {
     { label: 'domainsCheck()',   route: '/domains/check',   run: (c) => c.domainsCheck(['example.com']) },
     { label: 'domainsSuggest()', route: '/domains/suggest', run: (c) => c.domainsSuggest(['agent', 'grid']) },
     { label: 'parse(url)',       route: '/parse',           run: (c) => c.parse('https://example.com/report.docx') },
+    { label: 'company()',        route: '/company',         run: (c) => c.company('vercel.com') },
   ];
 
   for (const { label, route, run } of checks) {
