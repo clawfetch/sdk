@@ -399,6 +399,46 @@ describe('ClawFetch', () => {
     });
   });
 
+  describe('company()', () => {
+    it('should post the domain and return the company profile', async () => {
+      const companyResult = {
+        domain: 'vercel.com',
+        url: 'https://vercel.com/',
+        name: 'Vercel',
+        description: 'Build and deploy the best web experiences',
+        logo: 'https://vercel.com/logo.png',
+        favicon: 'https://vercel.com/favicon.ico',
+        language: 'en',
+        socials: { twitter: 'https://x.com/vercel', linkedin: null },
+        emails: ['support@vercel.com'],
+        phones: [],
+        addresses: [],
+        organization: null,
+        techStack: [{ name: 'Next.js', category: 'framework', evidence: 'x-powered-by' }],
+        pages: { about: 'https://vercel.com/about', pricing: 'https://vercel.com/pricing' },
+        fetchedPages: ['https://vercel.com/'],
+        fetchedAt: '2026-10-21T00:00:00.000Z',
+      };
+
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce(mockResponse(200, companyResult));
+
+      const { client, restore } = createMockedClient(fetchMock);
+
+      try {
+        const result = await client.company('vercel.com');
+        expect(result.name).toBe('Vercel');
+        expect(result.techStack[0].name).toBe('Next.js');
+        expect(result.socials.twitter).toBe('https://x.com/vercel');
+        const [input] = fetchMock.mock.calls[0];
+        expect(typeof input === 'string' ? input : (input as Request).url).toContain('/company');
+        expect(await requestBody(fetchMock.mock.calls[0])).toEqual({ domain: 'vercel.com' });
+      } finally {
+        restore();
+      }
+    });
+  });
+
   describe('extractors()', () => {
     it('should list available extractors', async () => {
       const extractorsResult = {

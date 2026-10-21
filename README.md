@@ -32,6 +32,10 @@ const rendered = await cf.render('https://app.uniswap.org');
 // Multi-source research ($0.02)
 const report = await cf.research('latest AI agent frameworks');
 
+// Company enrichment from a domain ($0.02)
+const acme = await cf.company('vercel.com');
+console.log(acme.name, acme.socials.linkedin, acme.techStack);
+
 // Domain availability ($0.008)
 const domains = await cf.domainsCheck(['coolstartup.com', 'coolstartup.ai']);
 
@@ -129,6 +133,7 @@ By default, the SDK retries transient errors with exponential backoff + jitter:
 | `/domains/check` | $0.008 |
 | `/domains/suggest` | $0.008 |
 | `/parse` | $0.005 |
+| `/company` | $0.02 |
 | `/extractors` | $0.001 |
 
 ## Supported Extractors

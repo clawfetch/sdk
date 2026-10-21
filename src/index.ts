@@ -158,6 +158,34 @@ export interface ParseResult {
   filename?: string;
 }
 
+export interface CompanyResult {
+  /** Normalized company domain (www. stripped) */
+  domain: string;
+  /** Final homepage URL after redirects */
+  url: string;
+  name: string | null;
+  description: string | null;
+  logo: string | null;
+  favicon: string | null;
+  language: string | null;
+  /** One profile URL per network, null when absent */
+  socials: Record<string, string | null>;
+  /** Deduped, lowercased contact emails */
+  emails: string[];
+  phones: string[];
+  /** schema.org PostalAddress entries */
+  addresses: Array<Record<string, string | null>>;
+  /** Trimmed schema.org Organization JSON-LD, when published */
+  organization: Record<string, unknown> | null;
+  /** Technologies detected from headers and HTML signatures */
+  techStack: Array<{ name: string; category: string; evidence: string }>;
+  /** Key same-site pages (about, careers, pricing, contact, docs, ...), null when absent */
+  pages: Record<string, string | null>;
+  /** URLs actually fetched (homepage + up to 2 of contact/about) */
+  fetchedPages: string[];
+  fetchedAt: string;
+}
+
 // ─── Internal helpers ────────────────────────────────────────────
 
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -300,6 +328,16 @@ export class ClawFetch {
       body = { base64: b64, ...opts };
     }
     return this.post<ParseResult>('/parse', body);
+  }
+
+  /**
+   * Company enrichment from a domain ($0.02): name, description, logo,
+   * social profiles, contact emails/phones, postal address, schema.org
+   * Organization data, tech stack and key pages. Deterministic parse of the
+   * live site, no LLM. Accepts a bare domain or any URL on the site.
+   */
+  async company(domain: string): Promise<CompanyResult> {
+    return this.post<CompanyResult>('/company', { domain });
   }
 
   /** List available extractors ($0.001) */
