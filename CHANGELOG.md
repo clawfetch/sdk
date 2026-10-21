@@ -5,6 +5,11 @@ All notable changes to `@clawfetch/sdk` will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.1] - 2026-10-21
+
+### Fixed
+- `require('@clawfetch/sdk')` now works. The CommonJS build is emitted as `dist/index.cjs`; previously `"type": "module"` made Node treat it as ESM, so CommonJS consumers got an empty module. ESM `import` was unaffected.
+
 ## [0.3.0] - 2026-10-21
 
 ### Added
